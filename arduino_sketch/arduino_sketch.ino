@@ -15,6 +15,8 @@
 #define DIO D1
 #define TIME_FORMAT        12    // 12 = 12 hours format || 24 = 24 hours format 
 
+#define COMFORT_TEMP_LOW_EDGE 18
+#define COMFORT_TEMP_HIGH_EDGE 25
 
 struct DisplayTime {
   int hour;
@@ -46,7 +48,7 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, D6, NEO_GRB + NEO_KHZ800);
 StripDriver strip_driver(strip);
-GyverOS<7> OS;
+GyverOS<10> OS;
 
 // функция для подключения к MQTT брокеру
 void reconnect() {
@@ -86,7 +88,6 @@ void update_dht_info() {
   airTemp = dht.readTemperature();
   Serial.println(humidity);
   Serial.println(airTemp);
-
   char airTempStr[10];
   dtostrf(airTemp, 4, 2, airTempStr);
   char humidityStr[10];
@@ -143,6 +144,15 @@ void display_time() {
   display.showNumberDecEx(displaytime, dot_mask, true);
 }
 
+void stop_welcome_animation_subprocess() {
+  Serial.println("fade_check: ");
+  Serial.println(strip_driver.get_context().stopped);
+  if (strip_driver.get_context().stopped) {
+    strip_driver.set_fade_animation_task();
+    OS.detach(6);
+  }
+}
+
 void setup() {
   Serial.begin(9600);
   display.clear();
@@ -164,6 +174,7 @@ void setup() {
   OS.attach(3, strip_driver_draw_wrapper , 16);
   OS.attach(4, display_time , 1000);
   OS.attach(5, update_time , 60000);
+  OS.attach(6, stop_welcome_animation_subprocess, 100);
 }
 
 void loop() {

@@ -35,8 +35,22 @@ void StripDriver::cold_animation() {
   }
 }
 void StripDriver::clear_ring(){
-  colorWipe(m_strip.Color(0, 0, 0), 50);
+  colorWipe(m_strip.Color(0, 0, 0));
   m_strip.setBrightness(BRIGHTNESS);
+  m_strip.show();
+}
+
+void StripDriver::fade_animation() {
+  if (m_context.stopped) {
+    return;
+  }
+  m_strip.setBrightness(m_context.brightness);
+  m_strip.show();
+  m_context.brightness -= 2;
+  if (m_context.brightness <= 0) {
+    m_context.stopped = true;
+    clear_ring();
+  }
 }
 
 void StripDriver::hot_animation() {
@@ -44,18 +58,16 @@ void StripDriver::hot_animation() {
     for(uint16_t i=0; i<m_strip.numPixels(); i+=2) {
       m_strip.setPixelColor(i, ORANGE_COLOR);
       m_strip.show();
-      delay(10);
     }
     m_strip.setBrightness(BRIGHTNESS - j);
     m_strip.show();
   }
 }
 
-void StripDriver::colorWipe(uint32_t c, uint8_t wait) {
+void StripDriver::colorWipe(uint32_t c) {
   for(uint16_t i=0; i<m_strip.numPixels(); i++) {
       m_strip.setPixelColor(i, c);
       m_strip.show();
-      delay(wait);
   }
 }
 
@@ -63,15 +75,32 @@ void StripDriver::draw() {
   switch (m_context.job) {
     case Job::Rainbow:
     rainbow();
+    break;
+    case Job::FadeAnimation:
+    fade_animation();
+    break;
   }
 }
 
 
 void StripDriver::set_rainbow_task() {
+  m_context.stopped = false;
   m_context.brightness = BRIGHTNESS;
-  m_context.color = 85;
+  m_context.color = 0;
   m_context.job = Job::Rainbow;
   Serial.println("set rainbow task");
+}
+
+const Context & StripDriver::get_context() const {
+  return m_context;
+}
+
+void StripDriver::set_fade_animation_task() {
+  m_context.stopped = false;
+  m_context.brightness = BRIGHTNESS;
+  m_context.color = 0;
+  m_context.job = Job::FadeAnimation;
+  Serial.println("set fade task");
 }
 
 void StripDriver::rainbow() {
@@ -82,7 +111,7 @@ void StripDriver::rainbow() {
     m_strip.setPixelColor(i, wheel((i + m_context.color) & 255));
   }
   m_strip.show();
-  if (m_context.color == 170) {
+  if (m_context.color == 255 * 3) {
     m_context.stopped = true;
   }
   m_context.color += 1;
