@@ -15,6 +15,7 @@
 #define DIO D1
 #define TIME_FORMAT        12    // 12 = 12 hours format || 24 = 24 hours format 
 
+
 struct DisplayTime {
   int hour;
   int minute;
@@ -131,17 +132,6 @@ void update_time() {
   struct tm * ptm;
   time_t rawtime = timeClient.getEpochTime();
   ptm = localtime (&rawtime);
-  if (ptm->tm_hour == 0 && ptm->tm_min == 0) {
-    if (minute == 60) {
-      hour++;
-      minute = 0;
-    }
-    if (hour == 24) {
-      hour = 0;
-      minute = 0;
-    }
-    return;
-  }
   hour = ptm->tm_hour;
   minute = ptm->tm_min;
 }
