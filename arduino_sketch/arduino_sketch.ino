@@ -33,16 +33,19 @@ const char* mqtt_password = "lr93154000";
 float waterTemp;
 float airTemp;
 float humidity;
+int hour;
+int minute;
+bool display_dots_mask = true;
 
 TM1637Display display = TM1637Display(CLK, DIO);
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org");
+NTPClient timeClient(ntpUDP, "ru.pool.ntp.org");
 DHT dht(D4, DHT22);
 WiFiClient espClient;
 PubSubClient client(espClient);
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, D6, NEO_GRB + NEO_KHZ800);
 StripDriver strip_driver(strip);
-GyverOS<5> OS;
+GyverOS<7> OS;
 
 // функция для подключения к MQTT брокеру
 void reconnect() {
@@ -109,6 +112,47 @@ void strip_driver_draw_wrapper() {
   strip_driver.draw();
 }
 
+void update_time() {
+  if (WiFi.status() != WL_CONNECTED) {
+    minute++;
+    if (minute == 60) {
+      hour++;
+      minute = 0;
+    }
+    if (hour == 24) {
+      hour = 0;
+      minute = 0;
+    }
+    return;
+  }
+  timeClient.update();
+  unsigned long now_epoch_time = timeClient.getEpochTime();
+  String formatted_time = timeClient.getFormattedTime();
+  struct tm * ptm;
+  time_t rawtime = timeClient.getEpochTime();
+  ptm = localtime (&rawtime);
+  if (ptm->tm_hour == 0 && ptm->tm_min == 0) {
+    if (minute == 60) {
+      hour++;
+      minute = 0;
+    }
+    if (hour == 24) {
+      hour = 0;
+      minute = 0;
+    }
+    return;
+  }
+  hour = ptm->tm_hour;
+  minute = ptm->tm_min;
+}
+
+void display_time() {
+  int displaytime = (hour * 100) + minute;
+  uint32_t dot_mask = display_dots_mask ? 0b11100000 : 0;
+  display_dots_mask = !display_dots_mask;
+  display.showNumberDecEx(displaytime, dot_mask, true);
+}
+
 void setup() {
   Serial.begin(9600);
   display.clear();
@@ -117,15 +161,19 @@ void setup() {
   strip_driver.set_rainbow_task();
   setup_wifi();
   timeClient.begin();
+  timeClient.setTimeOffset(10800);
   client.setServer(mqtt_server, mqtt_port);
   pinMode(D4, INPUT);
   pinMode(D0, OUTPUT);
   digitalWrite(D0, HIGH);
   dht.begin();
+  update_time();
   OS.attach(0, update_dht_info, 2000);
   OS.attach(1, reconnect_client, 5000);
   OS.attach(2, client_loop, 500);
   OS.attach(3, strip_driver_draw_wrapper , 16);
+  OS.attach(4, display_time , 1000);
+  OS.attach(5, update_time , 60000);
 }
 
 void loop() {
