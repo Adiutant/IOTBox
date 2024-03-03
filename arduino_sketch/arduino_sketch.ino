@@ -23,6 +23,12 @@ struct DisplayTime {
   int minute;
 };
 
+enum LedDisplayMode {
+  Time = 1 << 0,
+  Temperature = 1 << 2,
+  Humidity = 1 << 3
+} led_display_mode;
+
 const char* ssid = "APLN-0002";
 const char* password = "93154000";
 
@@ -33,12 +39,12 @@ const char* mqtt_user = "mqtt";
 const char* mqtt_password = "lr93154000";
 
 // переменные для хранения показаний термодатчиков и датчика влажности
-float waterTemp;
 float airTemp;
 float humidity;
 int hour;
 int minute;
 bool display_dots_mask = true;
+boolean button_was_up = false;
 
 TM1637Display display = TM1637Display(CLK, DIO);
 WiFiUDP ntpUDP;
@@ -137,23 +143,55 @@ void update_time() {
   minute = ptm->tm_min;
 }
 
-void display_time() {
-  int displaytime = (hour * 100) + minute;
-  uint32_t dot_mask = display_dots_mask ? 0b11100000 : 0;
-  display_dots_mask = !display_dots_mask;
-  display.showNumberDecEx(displaytime, dot_mask, true);
+void display_led_info() {
+  switch (led_display_mode) {
+    case Time:
+    {
+      int displaytime = (hour * 100) + minute;
+      uint32_t dot_mask = display_dots_mask ? 0b11100000 : 0;
+      display_dots_mask = !display_dots_mask;
+      display.showNumberDecEx(displaytime, dot_mask, true);
+    }
+    break;
+    case Temperature:
+    {
+      display.showNumberDecEx(airTemp, 0, true);
+    }
+    break;
+    case Humidity:
+    {
+      display.showNumberDecEx(humidity, 0, true);
+    }
+    break;
+  }
 }
 
 void stop_welcome_animation_subprocess() {
-  Serial.println("fade_check: ");
-  Serial.println(strip_driver.get_context().stopped);
   if (strip_driver.get_context().stopped) {
     strip_driver.set_fade_animation_task();
     OS.detach(6);
   }
 }
 
+void check_button_pressed() {
+  boolean button_is_up = digitalRead(D7);
+  boolean change_state = false;
+  if (button_was_up && !button_is_up) {
+    button_is_up = digitalRead(D7);
+    if (!button_is_up) { change_state = !change_state; }
+  }
+  button_was_up = button_is_up;
+  if (change_state && led_display_mode == LedDisplayMode::Time) {
+    led_display_mode = LedDisplayMode::Temperature;
+  } else if (change_state && led_display_mode == LedDisplayMode::Temperature) {
+    led_display_mode = LedDisplayMode::Humidity;
+  } else if (change_state && led_display_mode == LedDisplayMode::Humidity) {
+    led_display_mode = LedDisplayMode::Time;
+  }
+}
+
 void setup() {
+  led_display_mode = LedDisplayMode::Time;
   Serial.begin(9600);
   display.clear();
   display.setBrightness(7);
@@ -166,15 +204,18 @@ void setup() {
   pinMode(D4, INPUT);
   pinMode(D0, OUTPUT);
   digitalWrite(D0, HIGH);
+  pinMode(D7, INPUT_PULLUP); 
   dht.begin();
   update_time();
   OS.attach(0, update_dht_info, 2000);
   OS.attach(1, reconnect_client, 5000);
   OS.attach(2, client_loop, 500);
   OS.attach(3, strip_driver_draw_wrapper , 16);
-  OS.attach(4, display_time , 1000);
+  OS.attach(4, display_led_info, 1000);
   OS.attach(5, update_time , 60000);
   OS.attach(6, stop_welcome_animation_subprocess, 100);
+  OS.attach(7, check_button_pressed, 200);
+
 }
 
 void loop() {
