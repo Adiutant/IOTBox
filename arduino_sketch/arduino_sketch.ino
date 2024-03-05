@@ -10,6 +10,9 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include "strip_driver.hpp"
+#include <GyverPortal.h>
+
+#include <EEPROM.h>
 
 #define CLK D2
 #define DIO D1
@@ -23,17 +26,28 @@ struct DisplayTime {
   int minute;
 };
 
+struct LoginPass {
+  char ssid[20];
+  char pass[20];
+} lp;
+
 enum LedDisplayMode {
   Time = 1 << 0,
   Temperature = 1 << 2,
   Humidity = 1 << 3
 } led_display_mode;
 
-const char* ssid = "APLN-0002";
-const char* password = "93154000";
+enum InterfaceState {
+  Pending = 1 << 0,
+  WifiNet = 1 << 2,
+  WifiAp = 1 << 3
+} interface_state = Pending;
+
+// const char* ssid = "APLN-0002";
+// const char* password = "93154000";
 
 // установка параметров подключения к MQTT брокеру
-const char* mqtt_server = "192.168.0.101";
+const char* mqtt_server = "192.168.0.100";
 const int mqtt_port = 1883;
 const char* mqtt_user = "mqtt";
 const char* mqtt_password = "lr93154000";
@@ -41,8 +55,8 @@ const char* mqtt_password = "lr93154000";
 // переменные для хранения показаний термодатчиков и датчика влажности
 float airTemp;
 float humidity;
-int hour;
-int minute;
+int hour = 12;
+int minute = 30;
 bool display_dots_mask = true;
 boolean button_was_up = false;
 
@@ -54,11 +68,12 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, D6, NEO_GRB + NEO_KHZ800);
 StripDriver strip_driver(strip);
-GyverOS<10> OS;
+GyverOS<11> OS;
+GyverPortal ui;
 
 // функция для подключения к MQTT брокеру
 void reconnect() {
-  if (!client.connected()) {
+  if (!client.connected() && interface_state == WifiNet) {
     Serial.print("Attempting MQTT connection...");
     if (client.connect("ESP8266Client", mqtt_user, mqtt_password)) {
       //if (client.connect("ESP8266Client")) {
@@ -71,20 +86,36 @@ void reconnect() {
   }
 }
 
-void setup_wifi() {
+void check_network_subprocess() {
+  if (WiFi.status() == WL_CONNECTED || interface_state == WifiAp) {
+    return;
+  }
+  uint8_t attempts = 15;
   delay(10);
   Serial.println();
   Serial.print("Connecting to ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
+  EEPROM.begin(100);
+  EEPROM.get(0, lp);
+  Serial.println(lp.ssid);
+  WiFi.begin(lp.ssid, lp.pass);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
+    attempts -= 1;
+    if (attempts == 0) {
+      WiFi.disconnect();
+      Serial.println("cant connect to network: ");
+      Serial.println(lp.ssid);
+      interface_state = WifiAp;
+      login_portal();
+      return;
+    }
   }
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+  interface_state = WifiNet;
 }
 
 void update_dht_info() {
@@ -121,7 +152,7 @@ void strip_driver_draw_wrapper() {
 }
 
 void update_time() {
-  if (WiFi.status() != WL_CONNECTED) {
+  if (interface_state != WifiNet) {
     minute++;
     if (minute == 60) {
       hour++;
@@ -190,23 +221,79 @@ void check_button_pressed() {
   }
 }
 
-void setup() {
-  led_display_mode = LedDisplayMode::Time;
-  Serial.begin(9600);
-  display.clear();
-  display.setBrightness(7);
-  strip_driver.init();
-  strip_driver.set_rainbow_task();
-  setup_wifi();
-  timeClient.begin();
-  timeClient.setTimeOffset(10800);
-  client.setServer(mqtt_server, mqtt_port);
+void setup_dht() {
   pinMode(D4, INPUT);
   pinMode(D0, OUTPUT);
   digitalWrite(D0, HIGH);
-  pinMode(D7, INPUT_PULLUP); 
   dht.begin();
-  update_time();
+}
+
+void setup_display() {
+  display.clear();
+  display.setBrightness(7);
+}
+
+void setup_strip() {
+  strip_driver.init();
+  strip_driver.set_rainbow_task();
+}
+
+void build() {
+  GP.BUILD_BEGIN();
+  GP.THEME(GP_DARK);
+  GP.FORM_BEGIN("/login");
+  GP.TEXT("lg", "Login", lp.ssid);
+  GP.BREAK();
+  GP.TEXT("ps", "Password", lp.pass);
+  GP.SUBMIT("Submit");
+  GP.FORM_END();
+  GP.BUILD_END();
+}
+
+void login_portal() {
+  OS.stop(9);
+  Serial.println("Portal start");
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP("WiFi Config");
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+  Serial.println(WiFi.localIP());
+  ui.attachBuild(build);
+  ui.start();
+  ui.attach(action);
+}
+
+void portal_ui_subprocess() {
+  if (interface_state == WifiAp) {
+    ui.tick();
+  }
+}
+
+void action(GyverPortal& p) {
+  if (p.form("/login")) {      // кнопка нажата
+    p.copyStr("lg", lp.ssid);  // копируем себе
+    p.copyStr("ps", lp.pass);
+    EEPROM.put(0, lp);              // сохраняем
+    EEPROM.commit();                // записываем
+    ui.stop();
+    WiFi.softAPdisconnect();        // отключаем AP
+    interface_state = Pending;
+    OS.start(9);
+  }
+}
+
+
+void setup() {
+  led_display_mode = LedDisplayMode::Time;
+  Serial.begin(9600);
+  setup_display();
+  setup_strip();
+  timeClient.begin();
+  timeClient.setTimeOffset(10800);
+  client.setServer(mqtt_server, mqtt_port);
+  setup_dht();
+  pinMode(D7, INPUT_PULLUP); 
   OS.attach(0, update_dht_info, 2000);
   OS.attach(1, reconnect_client, 5000);
   OS.attach(2, client_loop, 500);
@@ -215,6 +302,10 @@ void setup() {
   OS.attach(5, update_time , 60000);
   OS.attach(6, stop_welcome_animation_subprocess, 100);
   OS.attach(7, check_button_pressed, 200);
+  OS.attach(8, portal_ui_subprocess, 20); 
+  OS.attach(9, check_network_subprocess, 100);
+  OS.exec(9);
+  OS.exec(5);
 
 }
 
