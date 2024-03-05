@@ -7,7 +7,8 @@
 enum Job {
   Rainbow, 
   HotAnimation,
-  ColdAnimation
+  ColdAnimation,
+  FadeAnimation
 };
 
 
@@ -27,13 +28,16 @@ class StripDriver {
     void cold_animation();
     void clear_ring();
     void hot_animation();
-    void colorWipe(uint32_t c, uint8_t wait);
+    void fade_animation();
+    void colorWipe(uint32_t c);
+    void rainbow();
     Adafruit_NeoPixel m_strip;
     Context m_context;
   public:
-    void rainbow();
+    const Context & get_context() const;
     void draw();
     void set_rainbow_task();
+    void set_fade_animation_task();
     void init();
     StripDriver(Adafruit_NeoPixel & strip);
 };
