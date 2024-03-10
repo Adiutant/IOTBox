@@ -69,7 +69,7 @@ PubSubClient client(espClient);
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, D6, NEO_GRB + NEO_KHZ800);
 StripDriver strip_driver(strip);
 GyverOS<11> OS;
-GyverPortal ui;
+GyverPortal local_ui;
 
 // функция для подключения к MQTT брокеру
 void reconnect() {
@@ -242,10 +242,20 @@ void build() {
   GP.BUILD_BEGIN();
   GP.THEME(GP_DARK);
   GP.FORM_BEGIN("/login");
+  GP.LABEL("SSID", "ssid_label");
   GP.TEXT("lg", "Login", lp.ssid);
   GP.BREAK();
+  GP.LABEL("Password", "pass_label");
   GP.TEXT("ps", "Password", lp.pass);
-  GP.SUBMIT("Submit");
+  GP.SUBMIT("Save WIFI Credentials");
+  GP.FORM_END();
+  GP.FORM_BEGIN("/sensors");
+  GP.LABEL("Temperature", "tmp_label");
+  GP.NUMBER_F("temperature", "", airTemp, 2, "", true);
+  GP.BREAK();
+  GP.LABEL("Humidity", "hum_label");
+  GP.NUMBER_F("humidity", "", humidity, 2, "", true);
+  GP.BREAK();
   GP.FORM_END();
   GP.BUILD_END();
 }
@@ -259,14 +269,14 @@ void login_portal() {
   Serial.print("AP IP address: ");
   Serial.println(IP);
   Serial.println(WiFi.localIP());
-  ui.attachBuild(build);
-  ui.start();
-  ui.attach(action);
+  local_ui.attachBuild(build);
+  local_ui.start();
+  local_ui.attach(action);
 }
 
 void portal_ui_subprocess() {
   if (interface_state == WifiAp) {
-    ui.tick();
+    local_ui.tick();
   }
 }
 
@@ -276,7 +286,7 @@ void action(GyverPortal& p) {
     p.copyStr("ps", lp.pass);
     EEPROM.put(0, lp);              // сохраняем
     EEPROM.commit();                // записываем
-    ui.stop();
+    local_ui.stop();
     WiFi.softAPdisconnect();        // отключаем AP
     interface_state = Pending;
     OS.start(9);
