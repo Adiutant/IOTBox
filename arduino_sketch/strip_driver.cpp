@@ -57,11 +57,9 @@ void StripDriver::simple_color_animation() {
   if (m_context.stopped) {
     return;
   }
-  Serial.println("perform");
   colorWipe(m_context.color);
   m_strip.setBrightness(m_context.brightness);
   m_strip.show();
-  Serial.println("perform2");
   m_context.stopped = true;
 }
 

@@ -123,8 +123,6 @@ void update_dht_info() {
   humidity = dht.readHumidity();
   delay(100);
   airTemp = dht.readTemperature();
-  Serial.println(humidity);
-  Serial.println(airTemp);
   char airTempStr[10];
   dtostrf(airTemp, 4, 2, airTempStr);
   char humidityStr[10];
@@ -302,8 +300,10 @@ void login_portal() {
 }
 
 void portal_ui_subprocess() {
-  if (interface_state == WifiAp) {
+  switch (interface_state) {
+    case WifiAp:
     local_ui.tick();
+    break;
   }
 }
 
