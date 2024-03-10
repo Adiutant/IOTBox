@@ -68,7 +68,7 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, D6, NEO_GRB + NEO_KHZ800);
 StripDriver strip_driver(strip);
-GyverOS<11> OS;
+GyverOS<13> OS;
 GyverPortal local_ui;
 
 // функция для подключения к MQTT брокеру
@@ -197,10 +197,10 @@ void display_led_info() {
   }
 }
 
-void stop_welcome_animation_subprocess() {
+void stop_animation_subprocess() {
   if (strip_driver.get_context().stopped) {
     strip_driver.set_fade_animation_task();
-    OS.detach(6);
+    OS.stop(6);
   }
 }
 
@@ -242,21 +242,48 @@ void build() {
   GP.BUILD_BEGIN();
   GP.THEME(GP_DARK);
   GP.FORM_BEGIN("/login");
+  GP.BLOCK_TAB_BEGIN("Wifi Connect");
+  GP.BOX_BEGIN();
   GP.LABEL("SSID", "ssid_label");
   GP.TEXT("lg", "Login", lp.ssid);
-  GP.BREAK();
+  GP.BOX_END();
+  GP.BOX_BEGIN();
   GP.LABEL("Password", "pass_label");
   GP.TEXT("ps", "Password", lp.pass);
+  GP.BOX_END();
   GP.SUBMIT("Save WIFI Credentials");
+  GP.BLOCK_END();
   GP.FORM_END();
-  GP.FORM_BEGIN("/sensors");
+  GP.BLOCK_TAB_BEGIN("Sensors");
+  GP.BOX_BEGIN();
   GP.LABEL("Temperature", "tmp_label");
   GP.NUMBER_F("temperature", "", airTemp, 2, "", true);
-  GP.BREAK();
+  GP.BOX_END();
+  GP.BOX_BEGIN();
   GP.LABEL("Humidity", "hum_label");
   GP.NUMBER_F("humidity", "", humidity, 2, "", true);
-  GP.BREAK();
+  GP.BOX_END();
+  GP.BLOCK_END();
+
+
+  GP.FORM_BEGIN("/led");
+  GP.BLOCK_TAB_BEGIN("LED");
+
+  GP.BOX_BEGIN();
+  GP.LABEL("Brightness", "brt_label");
+  GP.SLIDER_C("brightness");
+  GP.BOX_END();
+
+  GP.BOX_BEGIN();
+  GP.LABEL("Color", "color_label");
+  GPcolor color(255, 0, 0);
+  GP.COLOR("color", color);
+  GP.BOX_END();
+
+  GP.BLOCK_END();
   GP.FORM_END();
+
+
   GP.BUILD_END();
 }
 
@@ -291,6 +318,26 @@ void action(GyverPortal& p) {
     interface_state = Pending;
     OS.start(9);
   }
+
+  if (local_ui.click("brightness")) {
+    uint32_t brightness = 0;
+    local_ui.copyInt("brightness", brightness);
+    Serial.print('b ');
+    Serial.println(brightness);
+    strip_driver.set_simple_color_task(strip_driver.get_context().color, brightness);
+  }
+  if (local_ui.click("color")) {     
+    GPcolor buf;
+    if (local_ui.copyColor("color", buf)) {
+      Serial.print(buf.r);
+      Serial.print(',');
+      Serial.print(buf.g);
+      Serial.print(',');
+      Serial.print(buf.b);
+    }
+    uint32_t color = ((uint32_t)buf.r << 16) | ((uint32_t)buf.g << 8) | buf.b;
+    strip_driver.set_simple_color_task(color, strip_driver.get_context().brightness);
+  }
 }
 
 
@@ -310,7 +357,7 @@ void setup() {
   OS.attach(3, strip_driver_draw_wrapper , 16);
   OS.attach(4, display_led_info, 1000);
   OS.attach(5, update_time , 60000);
-  OS.attach(6, stop_welcome_animation_subprocess, 100);
+  OS.attach(6, stop_animation_subprocess, 100);
   OS.attach(7, check_button_pressed, 200);
   OS.attach(8, portal_ui_subprocess, 20); 
   OS.attach(9, check_network_subprocess, 100);

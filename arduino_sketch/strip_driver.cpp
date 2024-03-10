@@ -53,6 +53,18 @@ void StripDriver::fade_animation() {
   }
 }
 
+void StripDriver::simple_color_animation() {
+  if (m_context.stopped) {
+    return;
+  }
+  Serial.println("perform");
+  colorWipe(m_context.color);
+  m_strip.setBrightness(m_context.brightness);
+  m_strip.show();
+  Serial.println("perform2");
+  m_context.stopped = true;
+}
+
 void StripDriver::hot_animation() {
   for(uint16_t j=0; j<BRIGHTNESS; j+=5) {
     for(uint16_t i=0; i<m_strip.numPixels(); i+=2) {
@@ -79,9 +91,11 @@ void StripDriver::draw() {
     case Job::FadeAnimation:
     fade_animation();
     break;
+    case Job::SimpleColorTask:
+    simple_color_animation();
+    break;
   }
 }
-
 
 void StripDriver::set_rainbow_task() {
   m_context.stopped = false;
@@ -89,6 +103,14 @@ void StripDriver::set_rainbow_task() {
   m_context.color = 0;
   m_context.job = Job::Rainbow;
   Serial.println("set rainbow task");
+}
+
+void StripDriver::set_simple_color_task(uint32_t color, uint8_t brightness) {
+  m_context.stopped = false;
+  m_context.brightness = brightness;
+  m_context.color = color;
+  m_context.job = Job::SimpleColorTask;
+  Serial.println("set simple color task");
 }
 
 const Context & StripDriver::get_context() const {
