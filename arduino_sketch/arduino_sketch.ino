@@ -136,8 +136,10 @@ void update_dht_info() {
   char humidityStr[10];
   dtostrf(humidity, 4, 2, humidityStr);
   if (client.connected()) {
-    client.publish("home/room_roman/air_temperature", airTempStr);
-    client.publish("home/room_roman/humidity", humidityStr);
+    Serial.println("published");
+    char tempString[150];
+    sprintf(tempString, "{\"airtemperature\": %s , \"humidity\": %s }", airTempStr, humidityStr);
+    client.publish("devices/al_box", tempString);
   }
 }
 
