@@ -17,6 +17,9 @@
 #define CLK D2
 #define DIO D1
 #define TIME_FORMAT        12    // 12 = 12 hours format || 24 = 24 hours format 
+#define DHT_VCC D0
+#define DHT_IN D4
+#define BUTTON_PIN D7
 
 #define COMFORT_TEMP_LOW_EDGE 18
 #define COMFORT_TEMP_HIGH_EDGE 25
@@ -47,10 +50,14 @@ enum InterfaceState {
 // const char* password = "93154000";
 
 // установка параметров подключения к MQTT брокеру
-const char* mqtt_server = "192.168.0.100";
-const int mqtt_port = 1883;
-const char* mqtt_user = "mqtt";
-const char* mqtt_password = "lr93154000";
+
+struct Mqtt {
+  char mqtt_server[40] = "tdolimpiada.hub.greenpl.ru";
+  int mqtt_port = 1888;
+  char mqtt_user[40] = "al_project/al_box";
+  char mqtt_password[40] = "ff32ab0a59b09e7d13a1";
+} mqtt;
+
 
 // переменные для хранения показаний термодатчиков и датчика влажности
 float airTemp;
@@ -75,13 +82,13 @@ GyverPortal local_ui;
 void reconnect() {
   if (!client.connected() && interface_state == WifiNet) {
     Serial.print("Attempting MQTT connection...");
-    if (client.connect("ESP8266Client", mqtt_user, mqtt_password)) {
+    if (client.connect("ESP8266Client", mqtt.mqtt_user, mqtt.mqtt_password)) {
       //if (client.connect("ESP8266Client")) {
       Serial.println("connected");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
+      Serial.println(" try again in 10 seconds");
     }
   }
 }
@@ -94,8 +101,9 @@ void check_network_subprocess() {
   delay(10);
   Serial.println();
   Serial.print("Connecting to ");
-  EEPROM.begin(100);
+  EEPROM.begin(512);
   EEPROM.get(0, lp);
+  //EEPROM.get(128, mqtt);
   Serial.println(lp.ssid);
   WiFi.begin(lp.ssid, lp.pass);
   while (WiFi.status() != WL_CONNECTED) {
@@ -203,10 +211,10 @@ void stop_animation_subprocess() {
 }
 
 void check_button_pressed() {
-  boolean button_is_up = digitalRead(D7);
+  boolean button_is_up = digitalRead(BUTTON_PIN);
   boolean change_state = false;
   if (button_was_up && !button_is_up) {
-    button_is_up = digitalRead(D7);
+    button_is_up = digitalRead(BUTTON_PIN);
     if (!button_is_up) { change_state = !change_state; }
   }
   button_was_up = button_is_up;
@@ -220,9 +228,9 @@ void check_button_pressed() {
 }
 
 void setup_dht() {
-  pinMode(D4, INPUT);
-  pinMode(D0, OUTPUT);
-  digitalWrite(D0, HIGH);
+  pinMode(DHT_IN, INPUT);
+  pinMode(DHT_VCC, OUTPUT);
+  digitalWrite(DHT_VCC, HIGH);
   dht.begin();
 }
 
@@ -249,9 +257,32 @@ void build() {
   GP.LABEL("Password", "pass_label");
   GP.TEXT("ps", "Password", lp.pass);
   GP.BOX_END();
-  GP.SUBMIT("Save WIFI Credentials");
   GP.BLOCK_END();
+  GP.BLOCK_TAB_BEGIN("Mqtt");
+  GP.BOX_BEGIN();
+  GP.LABEL("Mqtt Server", "address_label");
+  GP.TEXT("address", "Address", mqtt.mqtt_server);
+  GP.BOX_END();
+  GP.BOX_BEGIN();
+  GP.LABEL("Mqtt port", "port_label");
+  GP.NUMBER("port", "Port", mqtt.mqtt_port);
+  GP.BOX_END();
+  GP.BOX_BEGIN();
+  GP.LABEL("Mqtt login", "login_label");
+  GP.TEXT("user", "User", mqtt.mqtt_user);
+  GP.BOX_END();
+  GP.BOX_BEGIN();
+  GP.LABEL("Mqtt password", "password_label");
+  GP.TEXT("password", "Password", mqtt.mqtt_password);
+  GP.BOX_END();
+  GP.BLOCK_END();
+
+  GP.SUBMIT("Save Network Credentials");
+  
   GP.FORM_END();
+
+  
+
   GP.BLOCK_TAB_BEGIN("Sensors");
   GP.BOX_BEGIN();
   GP.LABEL("Temperature", "tmp_label");
@@ -312,6 +343,11 @@ void action(GyverPortal& p) {
     p.copyStr("lg", lp.ssid);  // копируем себе
     p.copyStr("ps", lp.pass);
     EEPROM.put(0, lp);              // сохраняем
+    p.copyStr("address", mqtt.mqtt_server);  // копируем себе
+    p.copyInt("port", mqtt.mqtt_port);
+    p.copyStr("user", mqtt.mqtt_user);  
+    p.copyStr("password", mqtt.mqtt_password);
+    EEPROM.put(128, mqtt);              // сохраняем
     EEPROM.commit();                // записываем
     local_ui.stop();
     WiFi.softAPdisconnect();        // отключаем AP
@@ -348,11 +384,11 @@ void setup() {
   setup_strip();
   timeClient.begin();
   timeClient.setTimeOffset(10800);
-  client.setServer(mqtt_server, mqtt_port);
+  client.setServer(mqtt.mqtt_server, mqtt.mqtt_port);
   setup_dht();
-  pinMode(D7, INPUT_PULLUP); 
+  pinMode(BUTTON_PIN, INPUT_PULLUP); 
   OS.attach(0, update_dht_info, 2000);
-  OS.attach(1, reconnect_client, 5000);
+  OS.attach(1, reconnect_client, 10000);
   OS.attach(2, client_loop, 500);
   OS.attach(3, strip_driver_draw_wrapper , 16);
   OS.attach(4, display_led_info, 1000);
