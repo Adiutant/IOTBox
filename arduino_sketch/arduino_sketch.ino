@@ -21,6 +21,7 @@
 #define DHT_VCC D0
 #define DHT_IN D4
 #define BUTTON_PIN D7
+#define STRIP_PIN D6
 
 #define COMFORT_TEMP_LOW_EDGE 18
 #define COMFORT_TEMP_HIGH_EDGE 25
@@ -75,7 +76,7 @@ NTPClient timeClient(ntpUDP, "ru.pool.ntp.org");
 DHT dht(D4, DHT22);
 WiFiClient espClient;
 PubSubClient client(espClient);
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, D6, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, STRIP_PIN, NEO_GRB + NEO_KHZ800);
 StripDriver strip_driver(strip);
 GyverOS<13> OS;
 GyverPortal local_ui;
