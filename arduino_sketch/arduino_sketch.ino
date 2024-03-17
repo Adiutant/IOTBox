@@ -11,6 +11,7 @@
 #include <WiFiUdp.h>
 #include "strip_driver.hpp"
 #include <GyverPortal.h>
+#include <ArduinoJson.h>
 
 #include <EEPROM.h>
 
@@ -66,6 +67,7 @@ int hour = 12;
 int minute = 30;
 bool display_dots_mask = true;
 boolean button_was_up = false;
+const char* cmd_topic = "devices/al_box/cmds/display_color";
 
 TM1637Display display = TM1637Display(CLK, DIO);
 WiFiUDP ntpUDP;
@@ -85,6 +87,7 @@ void reconnect() {
     if (client.connect("ESP8266Client", mqtt.mqtt_user, mqtt.mqtt_password)) {
       //if (client.connect("ESP8266Client")) {
       Serial.println("connected");
+      client.subscribe(cmd_topic);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -136,7 +139,6 @@ void update_dht_info() {
   char humidityStr[10];
   dtostrf(humidity, 4, 2, humidityStr);
   if (client.connected()) {
-    Serial.println("published");
     char tempString[150];
     sprintf(tempString, "{\"airtemperature\": %s , \"humidity\": %s }", airTempStr, humidityStr);
     client.publish("devices/al_box", tempString);
@@ -282,7 +284,12 @@ void build() {
   GP.SUBMIT("Save Network Credentials");
   
   GP.FORM_END();
-
+//
+  GP.BLOCK_TAB_BEGIN("Time");
+  GP.BOX_BEGIN();
+  GP.TIME("time", GPtime(hour, minute, 0));
+  GP.BOX_END();
+  GP.BLOCK_END();
   
 
   GP.BLOCK_TAB_BEGIN("Sensors");
@@ -356,7 +363,12 @@ void action(GyverPortal& p) {
     interface_state = Pending;
     OS.start(9);
   }
-
+  if (local_ui.click("time")) {
+    GPtime time = local_ui.getTime("time");
+    Serial.println(time.encode());
+    hour = time.hour;
+    minute = time.minute;
+  }
   if (local_ui.click("brightness")) {
     uint32_t brightness = 0;
     local_ui.copyInt("brightness", brightness);
@@ -378,7 +390,31 @@ void action(GyverPortal& p) {
   }
 }
 
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  char msg[length + 1];
+  for (int i = 0; i < length; i++) {
+    msg[i] = (char)payload[i];
+  }
+  msg[length] = '\0';
+  Serial.println(msg);
 
+  if (strcmp(topic, cmd_topic) == 0) {
+    DynamicJsonDocument doc(8128);
+    DeserializationError error = deserializeJson(doc, msg);
+    JsonObject root = doc.as<JsonObject>();
+    int brightness = root["brightness"];
+    int blue_channel = root["blue_channel"];
+    int green_channel = root["green_channel"];
+    int red_channel = root["red_channel"];
+    uint32_t color = ((uint32_t)red_channel << 16) | ((uint32_t)green_channel << 8) | blue_channel;
+    strip_driver.set_simple_color_task(color, brightness);
+    Serial.println("brght: ");
+    Serial.println(brightness);
+  } 
+}
 void setup() {
   led_display_mode = LedDisplayMode::Time;
   Serial.begin(9600);
@@ -387,6 +423,7 @@ void setup() {
   timeClient.begin();
   timeClient.setTimeOffset(10800);
   client.setServer(mqtt.mqtt_server, mqtt.mqtt_port);
+  client.setCallback(callback);
   setup_dht();
   pinMode(BUTTON_PIN, INPUT_PULLUP); 
   OS.attach(0, update_dht_info, 2000);
