@@ -22,10 +22,15 @@ ArduinoJson
 
 ## Схема и используемые компоненты
 https://www.ozon.ru/product/bluetooth-audio-modul-vhm-314-mp3-dekoder-bez-poter-plata-audiopriemnika-besprovodnogo-stereo-663273907/
+
 https://www.ozon.ru/product/rupornyy-gromkogovoritel-dinamik-8-om-1-vt-23mm-korpus-dlya-dinamikov-933521322/
+
 https://www.ozon.ru/product/sensornyy-datchik-kasaniya-ttp223-knopka-vyklyuchatel-komplektuyushchie-dlya-platformy-943198718/
+
 https://www.ozon.ru/product/modul-tm-1637-svetodiodnyy-indikator-dlya-arduino-3-sht-956940693/
+
 https://www.ozon.ru/search/?deny_category_prediction=true&from_global=true&text=Электронный+модуль&product_id=624374772
+
 
 
 D2 - LED CLK
