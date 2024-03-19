@@ -34,14 +34,21 @@ https://www.ozon.ru/search/?deny_category_prediction=true&from_global=true&text=
 
 
 D2 - LED CLK
+
 D1 - LED SDA
+
 D0 - DHT VCC
+
 D4 - DHT IN
+
 D7 - BUTTON IN
+
 D6 - LED RING IN
 
-VCC и GND устройств развести в шину
-модуль bluetooth:
 
-шина left шина right шина gnd звука и подключить динамики соответственно
+VCC и GND устройств развести в шину
+
+### модуль bluetooth:
+
+развести шину left шину right шину gnd звука и подключить динамики соответственно
 
