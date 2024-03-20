@@ -8,6 +8,10 @@
 
 ## Офлайн мод 
 
+![photo_2024-03-20_16-00-14 (2)](https://github.com/Adiutant/IOTBox/assets/17684112/3efe5270-6ec8-4173-a9d3-b1c11158f608)
+
+![photo_2024-03-20_16-00-14](https://github.com/Adiutant/IOTBox/assets/17684112/cabaff8c-db6e-46b7-8daa-5f50ac7e7ea0)
+
 ## Библиотеки
 GyverOS
 DHT
