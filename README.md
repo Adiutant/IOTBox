@@ -14,14 +14,23 @@
 
 ## Библиотеки
 GyverOS
+
 DHT
+
 PubSubClient
+
 Adafruit_Sensor
+
 GyverBME280
+
 TM1637Display
+
 NTPClient
+
 WiFiUdp
+
 GyverPortal
+
 ArduinoJson
 
 ## Схема и используемые компоненты
