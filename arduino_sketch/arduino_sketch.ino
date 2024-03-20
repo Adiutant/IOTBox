@@ -17,14 +17,14 @@
 
 #define CLK D2
 #define DIO D1
-#define TIME_FORMAT        12    // 12 = 12 hours format || 24 = 24 hours format 
+#define TIME_FORMAT        12    // 12 = 12 hours format || 24 = 24 hours format !not impl!
 #define DHT_VCC D0
 #define DHT_IN D4
 #define BUTTON_PIN D7
 #define STRIP_PIN D6
 
 #define COMFORT_TEMP_LOW_EDGE 18
-#define COMFORT_TEMP_HIGH_EDGE 25
+#define COMFORT_TEMP_HIGH_EDGE 27
 
 struct DisplayTime {
   int hour;
@@ -135,6 +135,13 @@ void update_dht_info() {
   humidity = dht.readHumidity();
   delay(100);
   airTemp = dht.readTemperature();
+  if (airTemp > COMFORT_TEMP_HIGH_EDGE) {
+    strip_driver.set_hot_animation_task();
+  } else if (airTemp < COMFORT_TEMP_HIGH_EDGE && airTemp > COMFORT_TEMP_LOW_EDGE) {
+    strip_driver.set_fade_animation_task();
+  } else if (airTemp < COMFORT_TEMP_LOW_EDGE){
+    strip_driver.set_cold_animation_task();
+  }
   char airTempStr[10];
   dtostrf(airTemp, 4, 2, airTempStr);
   char humidityStr[10];

@@ -24,14 +24,18 @@ uint32_t StripDriver::wheel(byte WheelPos) {
 }
 
 void StripDriver::cold_animation() {
-  for(uint16_t j=0; j<BRIGHTNESS; j+=2) {
-    for(uint16_t i=0; i<m_strip.numPixels(); i+=2) {
-      m_strip.setPixelColor(i, BLUE_COLOR);
-      m_strip.show();
-      delay(10);
-    }
-    m_strip.setBrightness(BRIGHTNESS - j);
+  if (m_context.stopped) {
+    return;
+  }
+  for(uint16_t i=0; i<m_strip.numPixels(); i+=2) {
+    m_strip.setPixelColor(i, BLUE_COLOR);
     m_strip.show();
+  }
+  m_strip.setBrightness(m_context.brightness);
+  m_context.brightness-=5;
+  m_strip.show();
+  if (m_context.brightness <= 0) {
+    m_context.stopped = true;
   }
 }
 void StripDriver::clear_ring(){
@@ -64,13 +68,18 @@ void StripDriver::simple_color_animation() {
 }
 
 void StripDriver::hot_animation() {
-  for(uint16_t j=0; j<BRIGHTNESS; j+=5) {
-    for(uint16_t i=0; i<m_strip.numPixels(); i+=2) {
-      m_strip.setPixelColor(i, ORANGE_COLOR);
-      m_strip.show();
-    }
-    m_strip.setBrightness(BRIGHTNESS - j);
+  if (m_context.stopped) {
+    return;
+  }
+  for(uint16_t i=0; i<m_strip.numPixels(); i+=2) {
+    m_strip.setPixelColor(i, ORANGE_COLOR);
     m_strip.show();
+  }
+  m_strip.setBrightness(m_context.brightness);
+  m_context.brightness-=5;
+  m_strip.show();
+  if (m_context.brightness <= 0) {
+    m_context.stopped = true;
   }
 }
 
@@ -92,6 +101,12 @@ void StripDriver::draw() {
     case Job::SimpleColorTask:
     simple_color_animation();
     break;
+    case Job::HotAnimation:
+    hot_animation();
+    break;
+    case Job::ColdAnimation:
+    cold_animation();
+    break;
   }
 }
 
@@ -102,6 +117,29 @@ void StripDriver::set_rainbow_task() {
   m_context.job = Job::Rainbow;
   Serial.println("set rainbow task");
 }
+
+void StripDriver::set_hot_animation_task() {
+  if (m_context.stopped == false) {
+    return;
+  }
+  m_context.stopped = false;
+  m_context.brightness = BRIGHTNESS;
+  m_context.color = 0;
+  m_context.job = Job::HotAnimation;
+  Serial.println("set hot animation task");
+}
+
+void StripDriver::set_cold_animation_task() {
+  if (m_context.stopped == false) {
+    return;
+  }
+  m_context.stopped = false;
+  m_context.brightness = BRIGHTNESS;
+  m_context.color = 0;
+  m_context.job = Job::ColdAnimation;
+  Serial.println("set cold animation task");
+}
+
 
 void StripDriver::set_simple_color_task(uint32_t color, uint8_t brightness) {
   m_context.stopped = false;
@@ -116,6 +154,9 @@ const Context & StripDriver::get_context() const {
 }
 
 void StripDriver::set_fade_animation_task() {
+  if (m_context.stopped == false) {
+    return;
+  }
   m_context.stopped = false;
   m_context.brightness = BRIGHTNESS;
   m_context.color = 0;

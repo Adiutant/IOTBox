@@ -5,7 +5,7 @@
 #define BRIGHTNESS 200
 
 enum Job {
-  Rainbow, 
+  Rainbow = 0, 
   HotAnimation,
   ColdAnimation,
   FadeAnimation, 
@@ -40,6 +40,8 @@ class StripDriver {
     void draw();
     void set_rainbow_task();
     void set_fade_animation_task();
+    void set_hot_animation_task();
+    void set_cold_animation_task();
     void set_simple_color_task(uint32_t color, uint8_t brightness);
     void init();
     StripDriver(Adafruit_NeoPixel & strip);
