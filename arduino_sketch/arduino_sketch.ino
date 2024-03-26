@@ -1,7 +1,6 @@
 #include <GyverOS.h>
 #include <OneWire.h>
 #include <DHT.h>
-#include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
@@ -10,6 +9,7 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include "strip_driver.hpp"
+#include "network_manager.hpp"
 #include <GyverPortal.h>
 #include <ArduinoJson.h>
 
@@ -31,22 +31,12 @@ struct DisplayTime {
   int minute;
 };
 
-struct LoginPass {
-  char ssid[20];
-  char pass[20];
-} lp;
-
 enum LedDisplayMode {
   Time = 1 << 0,
   Temperature = 1 << 2,
   Humidity = 1 << 3
 } led_display_mode;
 
-enum InterfaceState {
-  Pending = 1 << 0,
-  WifiNet = 1 << 2,
-  WifiAp = 1 << 3
-} interface_state = Pending;
 
 // const char* ssid = "APLN-0002";
 // const char* password = "93154000";
@@ -80,10 +70,11 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, STRIP_PIN, NEO_GRB + NEO_KHZ800);
 StripDriver strip_driver(strip);
 GyverOS<13> OS;
 GyverPortal local_ui;
+NetworkManager network_manager = NetworkManager(espClient);
 
 // функция для подключения к MQTT брокеру
 void reconnect() {
-  if (!client.connected() && interface_state == WifiNet) {
+  if (!client.connected() && network_manager.get_interface_state() == WifiNet) {
     Serial.print("Attempting MQTT connection...");
     if (client.connect("ESP8266Client", mqtt.mqtt_user, mqtt.mqtt_password)) {
       //if (client.connect("ESP8266Client")) {
@@ -98,36 +89,14 @@ void reconnect() {
 }
 
 void check_network_subprocess() {
-  if (WiFi.status() == WL_CONNECTED || interface_state == WifiAp) {
-    return;
+  SignalToOs signal_to_os = network_manager.loop();
+  switch (signal_to_os) {
+    case SignalToOs::StartLocal:
+    login_portal();
+    break;
+    case SignalToOs::Idle:
+    break;
   }
-  uint8_t attempts = 15;
-  delay(10);
-  Serial.println();
-  Serial.print("Connecting to ");
-  EEPROM.begin(512);
-  EEPROM.get(0, lp);
-  //EEPROM.get(128, mqtt);
-  Serial.println(lp.ssid);
-  WiFi.begin(lp.ssid, lp.pass);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-    attempts -= 1;
-    if (attempts == 0) {
-      WiFi.disconnect();
-      Serial.println("cant connect to network: ");
-      Serial.println(lp.ssid);
-      interface_state = WifiAp;
-      login_portal();
-      return;
-    }
-  }
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-  interface_state = WifiNet;
 }
 
 void update_dht_info() {
@@ -170,7 +139,7 @@ void strip_driver_draw_wrapper() {
 }
 
 void update_time() {
-  if (interface_state != WifiNet) {
+  if (network_manager.get_interface_state() != WifiNet) {
     minute++;
     if (minute == 60) {
       hour++;
@@ -257,6 +226,7 @@ void setup_strip() {
 }
 
 void build() {
+  LoginPass lp = network_manager.get_credentials();
   GP.BUILD_BEGIN();
   GP.THEME(GP_DARK);
   GP.FORM_BEGIN("/login");
@@ -348,7 +318,7 @@ void login_portal() {
 }
 
 void portal_ui_subprocess() {
-  switch (interface_state) {
+  switch (network_manager.get_interface_state()) {
     case WifiAp:
     local_ui.tick();
     break;
@@ -357,6 +327,7 @@ void portal_ui_subprocess() {
 
 void action(GyverPortal& p) {
   if (p.form("/login")) {      // кнопка нажата
+    LoginPass lp;
     p.copyStr("lg", lp.ssid);  // копируем себе
     p.copyStr("ps", lp.pass);
     EEPROM.put(0, lp);              // сохраняем
@@ -368,7 +339,7 @@ void action(GyverPortal& p) {
     EEPROM.commit();                // записываем
     local_ui.stop();
     WiFi.softAPdisconnect();        // отключаем AP
-    interface_state = Pending;
+    network_manager.set_creds(lp);
     OS.start(9);
   }
   if (local_ui.click("time")) {
@@ -423,6 +394,19 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.println(brightness);
   } 
 }
+//Среди возможных улучшений: 
+//.использование облачной автоматизации и дашбордов,
+//.хранение состояний в классах вместо глобальных переменных,
+//автоматическое переподключение к MQTT в случае потери соединения, ?
+//использование асинхронных задержек вместо delay().
+
+void setup_network() {
+    LoginPass lp;
+    EEPROM.begin(512);
+    EEPROM.get(0, lp);
+    network_manager.set_creds(lp);
+}
+
 void setup() {
   led_display_mode = LedDisplayMode::Time;
   Serial.begin(9600);
@@ -433,6 +417,7 @@ void setup() {
   client.setServer(mqtt.mqtt_server, mqtt.mqtt_port);
   client.setCallback(callback);
   setup_dht();
+  setup_network();
   pinMode(BUTTON_PIN, INPUT_PULLUP); 
   OS.attach(0, update_dht_info, 2000);
   OS.attach(1, reconnect_client, 10000);
@@ -443,7 +428,7 @@ void setup() {
   OS.attach(6, stop_animation_subprocess, 100);
   OS.attach(7, check_button_pressed, 200);
   OS.attach(8, portal_ui_subprocess, 20); 
-  OS.attach(9, check_network_subprocess, 100);
+  OS.attach(9, check_network_subprocess, 500);
   OS.exec(9);
   OS.exec(5);
 

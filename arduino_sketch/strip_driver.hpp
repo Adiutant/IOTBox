@@ -1,3 +1,5 @@
+#pragma once
+
 #include <Adafruit_NeoPixel.h>
 
 #define BLUE_COLOR 0x00BFFF
