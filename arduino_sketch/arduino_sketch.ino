@@ -1,6 +1,6 @@
 #include <GyverOS.h>
 #include <OneWire.h>
-#include <DHT.h>
+
 #include <PubSubClient.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
@@ -10,6 +10,7 @@
 #include <WiFiUdp.h>
 #include "strip_driver.hpp"
 #include "network_manager.hpp"
+#include "sensors_data.hpp"
 #include <GyverPortal.h>
 #include <ArduinoJson.h>
 
@@ -38,9 +39,6 @@ enum LedDisplayMode {
 } led_display_mode;
 
 
-// const char* ssid = "APLN-0002";
-// const char* password = "93154000";
-
 // установка параметров подключения к MQTT брокеру
 
 struct Mqtt {
@@ -52,18 +50,17 @@ struct Mqtt {
 
 
 // переменные для хранения показаний термодатчиков и датчика влажности
-float airTemp;
-float humidity;
 int hour = 12;
 int minute = 30;
 bool display_dots_mask = true;
 boolean button_was_up = false;
-const char* cmd_topic = "devices/al_box/cmds/display_color";
 
+const char* cmd_topic = "devices/al_box/cmds/display_color";
+DHT dht(D4, DHT22);
+SensorsData sensors_data(&dht);
 TM1637Display display = TM1637Display(CLK, DIO);
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "ru.pool.ntp.org");
-DHT dht(D4, DHT22);
 WiFiClient espClient;
 PubSubClient client(espClient);
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, STRIP_PIN, NEO_GRB + NEO_KHZ800);
@@ -101,18 +98,18 @@ void check_network_subprocess() {
 
 void update_dht_info() {
   // замер температуры воздуха и влажности
-  humidity = dht.readHumidity();
-  delay(100);
-  airTemp = dht.readTemperature();
-  if (airTemp > COMFORT_TEMP_HIGH_EDGE) {
+  sensors_data.update();
+  auto air_temp = sensors_data.get_air_temp().data();
+  auto humidity = sensors_data.get_humidity().data();
+  if (air_temp > COMFORT_TEMP_HIGH_EDGE) {
     strip_driver.set_hot_animation_task();
-  } else if (airTemp < COMFORT_TEMP_HIGH_EDGE && airTemp > COMFORT_TEMP_LOW_EDGE) {
+  } else if (air_temp < COMFORT_TEMP_HIGH_EDGE && air_temp > COMFORT_TEMP_LOW_EDGE) {
     strip_driver.set_fade_animation_task();
-  } else if (airTemp < COMFORT_TEMP_LOW_EDGE){
+  } else if (air_temp < COMFORT_TEMP_LOW_EDGE){
     strip_driver.set_cold_animation_task();
   }
   char airTempStr[10];
-  dtostrf(airTemp, 4, 2, airTempStr);
+  dtostrf(air_temp, 4, 2, airTempStr);
   char humidityStr[10];
   dtostrf(humidity, 4, 2, humidityStr);
   if (client.connected()) {
@@ -173,11 +170,13 @@ void display_led_info() {
     break;
     case Temperature:
     {
-      display.showNumberDecEx(airTemp, 0, true);
+      auto air_temp = sensors_data.get_air_temp().data();
+      display.showNumberDecEx(air_temp, 0, true);
     }
     break;
     case Humidity:
     {
+      auto humidity = sensors_data.get_humidity().data();
       display.showNumberDecEx(humidity, 0, true);
     }
     break;
@@ -269,11 +268,12 @@ void build() {
   GP.BOX_END();
   GP.BLOCK_END();
   
-
+  auto air_temp = sensors_data.get_air_temp().data();
+  auto humidity = sensors_data.get_humidity().data();
   GP.BLOCK_TAB_BEGIN("Sensors");
   GP.BOX_BEGIN();
   GP.LABEL("Temperature", "tmp_label");
-  GP.NUMBER_F("temperature", "", airTemp, 2, "", true);
+  GP.NUMBER_F("temperature", "", air_temp, 2, "", true);
   GP.BOX_END();
   GP.BOX_BEGIN();
   GP.LABEL("Humidity", "hum_label");
@@ -396,9 +396,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 //Среди возможных улучшений: 
 //.использование облачной автоматизации и дашбордов,
-//.хранение состояний в классах вместо глобальных переменных,
+//.хранение состояний в классах вместо глобальных переменных, 
 //автоматическое переподключение к MQTT в случае потери соединения, ?
-//использование асинхронных задержек вместо delay().
+//использование асинхронных задержек вместо delay(). ! везде кроме dht
 
 void setup_network() {
     LoginPass lp;
