@@ -5,8 +5,7 @@ void NetworkManager::set_creds(const LoginPass &creds){
   credentials_changed = true;
 }
 
-NetworkManager::NetworkManager(const WiFiClient &client) {
-  espClient = client;
+NetworkManager::NetworkManager() {
 }
 
 InterfaceState NetworkManager::get_interface_state() const {

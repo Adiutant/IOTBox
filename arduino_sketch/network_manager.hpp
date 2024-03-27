@@ -23,9 +23,8 @@ LoginPass credentials;
 bool credentials_changed = false;
 InterfaceState interface_state = Pending;
 int reconnection_attempts = 15;
-WiFiClient espClient;
 public:
-NetworkManager(const WiFiClient &client);
+NetworkManager();
 ~NetworkManager() = default;
 void set_creds(const LoginPass &creds);
 InterfaceState get_interface_state() const;

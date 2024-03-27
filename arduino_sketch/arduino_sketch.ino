@@ -25,7 +25,7 @@
 #define STRIP_PIN D6
 
 #define COMFORT_TEMP_LOW_EDGE 18
-#define COMFORT_TEMP_HIGH_EDGE 27
+#define COMFORT_TEMP_HIGH_EDGE 31
 
 struct DisplayTime {
   int hour;
@@ -56,21 +56,22 @@ bool display_dots_mask = true;
 boolean button_was_up = false;
 
 const char* cmd_topic = "devices/al_box/cmds/display_color";
-DHT dht(D4, DHT22);
-SensorsData sensors_data(&dht);
+DHT dht = DHT(D4, DHT22);
+SensorsData sensors_data = SensorsData(&dht);
 TM1637Display display = TM1637Display(CLK, DIO);
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "ru.pool.ntp.org");
+NTPClient timeClient = NTPClient(ntpUDP, "ru.pool.ntp.org");
 WiFiClient espClient;
-PubSubClient client(espClient);
+PubSubClient client = PubSubClient(espClient);
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, STRIP_PIN, NEO_GRB + NEO_KHZ800);
-StripDriver strip_driver(strip);
+StripDriver strip_driver = StripDriver(strip);
 GyverOS<13> OS;
 GyverPortal local_ui;
-NetworkManager network_manager = NetworkManager(espClient);
+NetworkManager network_manager = NetworkManager();
 
 // функция для подключения к MQTT брокеру
 void reconnect() {
+  Serial.println("reconnect()");
   if (!client.connected() && network_manager.get_interface_state() == WifiNet) {
     Serial.print("Attempting MQTT connection...");
     if (client.connect("ESP8266Client", mqtt.mqtt_user, mqtt.mqtt_password)) {
@@ -86,6 +87,7 @@ void reconnect() {
 }
 
 void check_network_subprocess() {
+  Serial.println("check_network_subprocess()");
   SignalToOs signal_to_os = network_manager.loop();
   switch (signal_to_os) {
     case SignalToOs::StartLocal:
@@ -97,6 +99,7 @@ void check_network_subprocess() {
 }
 
 void update_dht_info() {
+  Serial.println("update_dht_info()");
   // замер температуры воздуха и влажности
   sensors_data.update();
   auto air_temp = sensors_data.get_air_temp().data();
@@ -126,16 +129,19 @@ void reconnect_client() {
 }
 
 void client_loop() {
+  Serial.println("client_loop()");
   if (client.connected()) {
     client.loop();
   }
 }
 
 void strip_driver_draw_wrapper() {
+  Serial.println("strip_driver_draw_wrapper()");
   strip_driver.draw();
 }
 
 void update_time() {
+  Serial.println("update_time()");
   if (network_manager.get_interface_state() != WifiNet) {
     minute++;
     if (minute == 60) {
@@ -154,11 +160,15 @@ void update_time() {
   struct tm * ptm;
   time_t rawtime = timeClient.getEpochTime();
   ptm = localtime (&rawtime);
+  if(ptm == nullptr) {
+    return;
+  }
   hour = ptm->tm_hour;
   minute = ptm->tm_min;
 }
 
 void display_led_info() {
+  Serial.println("display_led_info()");
   switch (led_display_mode) {
     case Time:
     {
@@ -396,9 +406,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 //Среди возможных улучшений: 
 //.использование облачной автоматизации и дашбордов,
-//.хранение состояний в классах вместо глобальных переменных, 
+//.хранение состояний в классах вместо глобальных переменных, Все, кроме mqtt и дисплея времени
 //автоматическое переподключение к MQTT в случае потери соединения, ?
-//использование асинхронных задержек вместо delay(). ! везде кроме dht
+//использование асинхронных задержек вместо delay(). ! везде
 
 void setup_network() {
     LoginPass lp;
