@@ -17,7 +17,7 @@ LoginPass NetworkManager::get_credentials() const {
 }
 
 SignalToOs NetworkManager::loop() {
-  if (WiFi.status() != WL_CONNECTED && interface_state == WifiAp) {
+  if (WiFi.status() != WL_CONNECTED && interface_state == WifiNet) {
     interface_state = Pending;
   }
   if (interface_state == WifiAp) {

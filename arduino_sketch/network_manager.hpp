@@ -22,7 +22,7 @@ class NetworkManager {
 private:
 LoginPass credentials;
 InterfaceState interface_state = Pending;
-int reconnection_attempts = 15;
+int reconnection_attempts = 25;
 public:
 NetworkManager();
 ~NetworkManager() = default;
