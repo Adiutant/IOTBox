@@ -11,6 +11,7 @@
 #include "strip_driver.hpp"
 #include "network_manager.hpp"
 #include "sensors_data.hpp"
+#include "multi_clock.hpp"
 #include <GyverPortal.h>
 #include <ArduinoJson.h>
 
@@ -27,17 +28,6 @@
 #define COMFORT_TEMP_LOW_EDGE 18
 #define COMFORT_TEMP_HIGH_EDGE 31
 
-struct DisplayTime {
-  int hour;
-  int minute;
-};
-
-enum LedDisplayMode {
-  Time = 1 << 0,
-  Temperature = 1 << 2,
-  Humidity = 1 << 3
-} led_display_mode;
-
 
 // установка параметров подключения к MQTT брокеру
 
@@ -48,12 +38,6 @@ struct Mqtt {
   char mqtt_password[40] = "ff32ab0a59b09e7d13a1";
 } mqtt;
 
-
-// переменные для хранения показаний термодатчиков и датчика влажности
-int hour = 12;
-int minute = 30;
-bool display_dots_mask = true;
-boolean button_was_up = false;
 
 const char* cmd_topic = "devices/al_box/cmds/display_color";
 DHT dht = DHT(D4, DHT22);
@@ -68,6 +52,7 @@ StripDriver strip_driver = StripDriver(strip);
 GyverOS<13> OS;
 GyverPortal local_ui;
 NetworkManager network_manager = NetworkManager();
+MultiClock multi_clock = MultiClock(LedDisplayMode::Time, BUTTON_PIN);
 
 // функция для подключения к MQTT брокеру
 void reconnect() {
@@ -141,6 +126,8 @@ void strip_driver_draw_wrapper() {
 }
 
 void update_time() {
+  int hour =  multi_clock.get_hour();
+  int minute =  multi_clock.get_minute();
   Serial.println("update_time()");
   if (network_manager.get_interface_state() != WifiNet) {
     minute++;
@@ -165,17 +152,17 @@ void update_time() {
   }
   hour = ptm->tm_hour;
   minute = ptm->tm_min;
+  multi_clock.set_hour(hour);
+  multi_clock.set_minute(minute);
 }
 
 void display_led_info() {
   Serial.println("display_led_info()");
-  switch (led_display_mode) {
+  switch (multi_clock.get_led_display_mode()) {
     case Time:
     {
-      int displaytime = (hour * 100) + minute;
-      uint32_t dot_mask = display_dots_mask ? 0b11100000 : 0;
-      display_dots_mask = !display_dots_mask;
-      display.showNumberDecEx(displaytime, dot_mask, true);
+      DisplayTime time =  multi_clock.get_time();
+      display.showNumberDecEx(time.display_time, time.dot_mask, true);
     }
     break;
     case Temperature:
@@ -201,20 +188,7 @@ void stop_animation_subprocess() {
 }
 
 void check_button_pressed() {
-  boolean button_is_up = digitalRead(BUTTON_PIN);
-  boolean change_state = false;
-  if (button_was_up && !button_is_up) {
-    button_is_up = digitalRead(BUTTON_PIN);
-    if (!button_is_up) { change_state = !change_state; }
-  }
-  button_was_up = button_is_up;
-  if (change_state && led_display_mode == LedDisplayMode::Time) {
-    led_display_mode = LedDisplayMode::Temperature;
-  } else if (change_state && led_display_mode == LedDisplayMode::Temperature) {
-    led_display_mode = LedDisplayMode::Humidity;
-  } else if (change_state && led_display_mode == LedDisplayMode::Humidity) {
-    led_display_mode = LedDisplayMode::Time;
-  }
+  multi_clock.set_led_display_mode_from_button();
 }
 
 void setup_dht() {
@@ -272,6 +246,8 @@ void build() {
   
   GP.FORM_END();
 //
+  int hour =  multi_clock.get_hour();
+  int minute =  multi_clock.get_minute();
   GP.BLOCK_TAB_BEGIN("Time");
   GP.BOX_BEGIN();
   GP.TIME("time", GPtime(hour, minute, 0));
@@ -355,8 +331,11 @@ void action(GyverPortal& p) {
   if (local_ui.click("time")) {
     GPtime time = local_ui.getTime("time");
     Serial.println(time.encode());
-    hour = time.hour;
-    minute = time.minute;
+    int hour = time.hour;
+    int minute = time.minute;
+    multi_clock.set_hour(hour);
+    multi_clock.set_minute(minute);
+
   }
   if (local_ui.click("brightness")) {
     uint32_t brightness = 0;
@@ -404,11 +383,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.println(brightness);
   } 
 }
-//Среди возможных улучшений: 
-//.использование облачной автоматизации и дашбордов,
-//.хранение состояний в классах вместо глобальных переменных, Все, кроме mqtt и дисплея времени
-//автоматическое переподключение к MQTT в случае потери соединения, ?
-//использование асинхронных задержек вместо delay(). ! везде
 
 void setup_network() {
     LoginPass lp;
@@ -418,7 +392,6 @@ void setup_network() {
 }
 
 void setup() {
-  led_display_mode = LedDisplayMode::Time;
   Serial.begin(9600);
   setup_display();
   setup_strip();
