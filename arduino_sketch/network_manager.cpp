@@ -40,7 +40,7 @@ SignalToOs NetworkManager::loop() {
       Serial.println("cant connect to network: ");
       Serial.println(credentials.ssid);
       interface_state = WifiAp;
-      reconnection_attempts = 15;
+      reconnection_attempts = 25;
       return SignalToOs::StartLocal;
     }
   } else if (WiFi.status() == WL_CONNECTED) {
@@ -48,7 +48,7 @@ SignalToOs NetworkManager::loop() {
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
     interface_state = WifiNet;
-    reconnection_attempts = 15;
+    reconnection_attempts = 25;
   }
   return SignalToOs::Idle;
 }
