@@ -10,7 +10,8 @@ enum InterfaceState {
   Pending = 1 << 0,
   WifiNet = 1 << 2,
   WifiAp = 1 << 3,
-  Connecting = 1 << 4
+  Connecting = 1 << 4,
+  ReconnectionAttempt = 1 << 5
 };
 
 enum SignalToOs {
