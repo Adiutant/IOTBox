@@ -91,7 +91,8 @@ void update_dht_info() {
   auto humidity = sensors_data.get_humidity().data();
   if (air_temp > COMFORT_TEMP_HIGH_EDGE) {
     strip_driver.set_hot_animation_task();
-  } else if (air_temp < COMFORT_TEMP_HIGH_EDGE && air_temp > COMFORT_TEMP_LOW_EDGE) {
+  } else if (air_temp < COMFORT_TEMP_HIGH_EDGE && air_temp > COMFORT_TEMP_LOW_EDGE &&
+    (strip_driver.get_context().job == Job::ColdAnimation || strip_driver.get_context().job == Job::HotAnimation)) {
     strip_driver.set_fade_animation_task();
   } else if (air_temp < COMFORT_TEMP_LOW_EDGE){
     strip_driver.set_cold_animation_task();
