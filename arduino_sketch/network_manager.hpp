@@ -9,7 +9,8 @@ struct LoginPass {
 enum InterfaceState {
   Pending = 1 << 0,
   WifiNet = 1 << 2,
-  WifiAp = 1 << 3
+  WifiAp = 1 << 3,
+  Connecting = 1 << 4
 };
 
 enum SignalToOs {
@@ -20,7 +21,6 @@ enum SignalToOs {
 class NetworkManager {
 private:
 LoginPass credentials;
-bool credentials_changed = false;
 InterfaceState interface_state = Pending;
 int reconnection_attempts = 15;
 public:

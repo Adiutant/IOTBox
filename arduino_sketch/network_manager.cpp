@@ -2,7 +2,7 @@
 
 void NetworkManager::set_creds(const LoginPass &creds){
   credentials = creds;
-  credentials_changed = true;
+  interface_state = Pending;
 }
 
 NetworkManager::NetworkManager() {
@@ -17,19 +17,22 @@ LoginPass NetworkManager::get_credentials() const {
 }
 
 SignalToOs NetworkManager::loop() {
-  if (interface_state == WifiAp && !credentials_changed) {
+  if (WiFi.status() != WL_CONNECTED && interface_state == WifiAp) {
+    interface_state = Pending;
+  }
+  if (interface_state == WifiAp) {
     return SignalToOs::Idle;
   }
-  if (WiFi.status() == WL_CONNECTED && interface_state == WifiNet ) {
+  if (interface_state == WifiNet ) {
     return SignalToOs::Idle;
   }
-  if (credentials_changed) {
+  if (interface_state == Pending) {
     Serial.print("Connecting to ");
     //EEPROM.get(128, mqtt);
     Serial.println(credentials.ssid);
+    interface_state = Connecting;
     WiFi.begin(credentials.ssid, credentials.pass);
   }
-  credentials_changed = false;
   if (WiFi.status() != WL_CONNECTED) {
     reconnection_attempts -= 1;
     if (reconnection_attempts == 0) {
