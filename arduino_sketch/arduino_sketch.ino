@@ -56,7 +56,6 @@ MultiClock multi_clock = MultiClock(LedDisplayMode::Time, BUTTON_PIN);
 
 // функция для подключения к MQTT брокеру
 void reconnect() {
-  Serial.println("reconnect()");
   if (!client.connected() && network_manager.get_interface_state() == WifiNet) {
     Serial.print("Attempting MQTT connection...");
     if (client.connect("ESP8266Client", mqtt.mqtt_user, mqtt.mqtt_password)) {
@@ -72,7 +71,6 @@ void reconnect() {
 }
 
 void check_network_subprocess() {
-  Serial.println("check_network_subprocess()");
   SignalToOs signal_to_os = network_manager.loop();
   switch (signal_to_os) {
     case SignalToOs::StartLocal:
@@ -84,7 +82,6 @@ void check_network_subprocess() {
 }
 
 void update_dht_info() {
-  Serial.println("update_dht_info()");
   // замер температуры воздуха и влажности
   sensors_data.update();
   auto air_temp = sensors_data.get_air_temp().data();
@@ -115,14 +112,12 @@ void reconnect_client() {
 }
 
 void client_loop() {
-  Serial.println("client_loop()");
   if (client.connected()) {
     client.loop();
   }
 }
 
 void strip_driver_draw_wrapper() {
-  Serial.println("strip_driver_draw_wrapper()");
   strip_driver.draw();
 }
 
@@ -158,7 +153,6 @@ void update_time() {
 }
 
 void display_led_info() {
-  Serial.println("display_led_info()");
   switch (multi_clock.get_led_display_mode()) {
     case Time:
     {
