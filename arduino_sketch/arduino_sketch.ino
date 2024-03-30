@@ -1,7 +1,6 @@
 #include <GyverOS.h>
 #include <OneWire.h>
-#include <DHT.h>
-#include <ESP8266WiFi.h>
+
 #include <PubSubClient.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
@@ -10,6 +9,9 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include "strip_driver.hpp"
+#include "network_manager.hpp"
+#include "sensors_data.hpp"
+#include "multi_clock.hpp"
 #include <GyverPortal.h>
 #include <ArduinoJson.h>
 
@@ -24,32 +26,8 @@
 #define STRIP_PIN D6
 
 #define COMFORT_TEMP_LOW_EDGE 18
-#define COMFORT_TEMP_HIGH_EDGE 27
+#define COMFORT_TEMP_HIGH_EDGE 31
 
-struct DisplayTime {
-  int hour;
-  int minute;
-};
-
-struct LoginPass {
-  char ssid[20];
-  char pass[20];
-} lp;
-
-enum LedDisplayMode {
-  Time = 1 << 0,
-  Temperature = 1 << 2,
-  Humidity = 1 << 3
-} led_display_mode;
-
-enum InterfaceState {
-  Pending = 1 << 0,
-  WifiNet = 1 << 2,
-  WifiAp = 1 << 3
-} interface_state = Pending;
-
-// const char* ssid = "APLN-0002";
-// const char* password = "93154000";
 
 // установка параметров подключения к MQTT брокеру
 
@@ -61,29 +39,25 @@ struct Mqtt {
 } mqtt;
 
 
-// переменные для хранения показаний термодатчиков и датчика влажности
-float airTemp;
-float humidity;
-int hour = 12;
-int minute = 30;
-bool display_dots_mask = true;
-boolean button_was_up = false;
 const char* cmd_topic = "devices/al_box/cmds/display_color";
-
+DHT dht = DHT(D4, DHT22);
+SensorsData sensors_data = SensorsData(&dht);
 TM1637Display display = TM1637Display(CLK, DIO);
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "ru.pool.ntp.org");
-DHT dht(D4, DHT22);
+NTPClient timeClient = NTPClient(ntpUDP, "ru.pool.ntp.org");
 WiFiClient espClient;
-PubSubClient client(espClient);
+PubSubClient client = PubSubClient(espClient);
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, STRIP_PIN, NEO_GRB + NEO_KHZ800);
-StripDriver strip_driver(strip);
+StripDriver strip_driver = StripDriver(strip);
 GyverOS<13> OS;
 GyverPortal local_ui;
+NetworkManager network_manager = NetworkManager();
+MultiClock multi_clock = MultiClock(LedDisplayMode::Time, BUTTON_PIN);
 
 // функция для подключения к MQTT брокеру
 void reconnect() {
-  if (!client.connected() && interface_state == WifiNet) {
+  Serial.println("reconnect()");
+  if (!client.connected() && network_manager.get_interface_state() == WifiNet) {
     Serial.print("Attempting MQTT connection...");
     if (client.connect("ESP8266Client", mqtt.mqtt_user, mqtt.mqtt_password)) {
       //if (client.connect("ESP8266Client")) {
@@ -98,52 +72,32 @@ void reconnect() {
 }
 
 void check_network_subprocess() {
-  if (WiFi.status() == WL_CONNECTED || interface_state == WifiAp) {
-    return;
+  Serial.println("check_network_subprocess()");
+  SignalToOs signal_to_os = network_manager.loop();
+  switch (signal_to_os) {
+    case SignalToOs::StartLocal:
+    login_portal();
+    break;
+    case SignalToOs::Idle:
+    break;
   }
-  uint8_t attempts = 15;
-  delay(10);
-  Serial.println();
-  Serial.print("Connecting to ");
-  EEPROM.begin(512);
-  EEPROM.get(0, lp);
-  //EEPROM.get(128, mqtt);
-  Serial.println(lp.ssid);
-  WiFi.begin(lp.ssid, lp.pass);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-    attempts -= 1;
-    if (attempts == 0) {
-      WiFi.disconnect();
-      Serial.println("cant connect to network: ");
-      Serial.println(lp.ssid);
-      interface_state = WifiAp;
-      login_portal();
-      return;
-    }
-  }
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-  interface_state = WifiNet;
 }
 
 void update_dht_info() {
+  Serial.println("update_dht_info()");
   // замер температуры воздуха и влажности
-  humidity = dht.readHumidity();
-  delay(100);
-  airTemp = dht.readTemperature();
-  if (airTemp > COMFORT_TEMP_HIGH_EDGE) {
+  sensors_data.update();
+  auto air_temp = sensors_data.get_air_temp().data();
+  auto humidity = sensors_data.get_humidity().data();
+  if (air_temp > COMFORT_TEMP_HIGH_EDGE) {
     strip_driver.set_hot_animation_task();
-  } else if (airTemp < COMFORT_TEMP_HIGH_EDGE && airTemp > COMFORT_TEMP_LOW_EDGE) {
+  } else if (air_temp < COMFORT_TEMP_HIGH_EDGE && air_temp > COMFORT_TEMP_LOW_EDGE) {
     strip_driver.set_fade_animation_task();
-  } else if (airTemp < COMFORT_TEMP_LOW_EDGE){
+  } else if (air_temp < COMFORT_TEMP_LOW_EDGE){
     strip_driver.set_cold_animation_task();
   }
   char airTempStr[10];
-  dtostrf(airTemp, 4, 2, airTempStr);
+  dtostrf(air_temp, 4, 2, airTempStr);
   char humidityStr[10];
   dtostrf(humidity, 4, 2, humidityStr);
   if (client.connected()) {
@@ -160,17 +114,22 @@ void reconnect_client() {
 }
 
 void client_loop() {
+  Serial.println("client_loop()");
   if (client.connected()) {
     client.loop();
   }
 }
 
 void strip_driver_draw_wrapper() {
+  Serial.println("strip_driver_draw_wrapper()");
   strip_driver.draw();
 }
 
 void update_time() {
-  if (interface_state != WifiNet) {
+  int hour =  multi_clock.get_hour();
+  int minute =  multi_clock.get_minute();
+  Serial.println("update_time()");
+  if (network_manager.get_interface_state() != WifiNet) {
     minute++;
     if (minute == 60) {
       hour++;
@@ -188,27 +147,33 @@ void update_time() {
   struct tm * ptm;
   time_t rawtime = timeClient.getEpochTime();
   ptm = localtime (&rawtime);
+  if(ptm == nullptr) {
+    return;
+  }
   hour = ptm->tm_hour;
   minute = ptm->tm_min;
+  multi_clock.set_hour(hour);
+  multi_clock.set_minute(minute);
 }
 
 void display_led_info() {
-  switch (led_display_mode) {
+  Serial.println("display_led_info()");
+  switch (multi_clock.get_led_display_mode()) {
     case Time:
     {
-      int displaytime = (hour * 100) + minute;
-      uint32_t dot_mask = display_dots_mask ? 0b11100000 : 0;
-      display_dots_mask = !display_dots_mask;
-      display.showNumberDecEx(displaytime, dot_mask, true);
+      DisplayTime time =  multi_clock.get_time();
+      display.showNumberDecEx(time.display_time, time.dot_mask, true);
     }
     break;
     case Temperature:
     {
-      display.showNumberDecEx(airTemp, 0, true);
+      auto air_temp = sensors_data.get_air_temp().data();
+      display.showNumberDecEx(air_temp, 0, true);
     }
     break;
     case Humidity:
     {
+      auto humidity = sensors_data.get_humidity().data();
       display.showNumberDecEx(humidity, 0, true);
     }
     break;
@@ -223,20 +188,7 @@ void stop_animation_subprocess() {
 }
 
 void check_button_pressed() {
-  boolean button_is_up = digitalRead(BUTTON_PIN);
-  boolean change_state = false;
-  if (button_was_up && !button_is_up) {
-    button_is_up = digitalRead(BUTTON_PIN);
-    if (!button_is_up) { change_state = !change_state; }
-  }
-  button_was_up = button_is_up;
-  if (change_state && led_display_mode == LedDisplayMode::Time) {
-    led_display_mode = LedDisplayMode::Temperature;
-  } else if (change_state && led_display_mode == LedDisplayMode::Temperature) {
-    led_display_mode = LedDisplayMode::Humidity;
-  } else if (change_state && led_display_mode == LedDisplayMode::Humidity) {
-    led_display_mode = LedDisplayMode::Time;
-  }
+  multi_clock.set_led_display_mode_from_button();
 }
 
 void setup_dht() {
@@ -257,6 +209,7 @@ void setup_strip() {
 }
 
 void build() {
+  LoginPass lp = network_manager.get_credentials();
   GP.BUILD_BEGIN();
   GP.THEME(GP_DARK);
   GP.FORM_BEGIN("/login");
@@ -293,17 +246,20 @@ void build() {
   
   GP.FORM_END();
 //
+  int hour =  multi_clock.get_hour();
+  int minute =  multi_clock.get_minute();
   GP.BLOCK_TAB_BEGIN("Time");
   GP.BOX_BEGIN();
   GP.TIME("time", GPtime(hour, minute, 0));
   GP.BOX_END();
   GP.BLOCK_END();
   
-
+  auto air_temp = sensors_data.get_air_temp().data();
+  auto humidity = sensors_data.get_humidity().data();
   GP.BLOCK_TAB_BEGIN("Sensors");
   GP.BOX_BEGIN();
   GP.LABEL("Temperature", "tmp_label");
-  GP.NUMBER_F("temperature", "", airTemp, 2, "", true);
+  GP.NUMBER_F("temperature", "", air_temp, 2, "", true);
   GP.BOX_END();
   GP.BOX_BEGIN();
   GP.LABEL("Humidity", "hum_label");
@@ -348,7 +304,7 @@ void login_portal() {
 }
 
 void portal_ui_subprocess() {
-  switch (interface_state) {
+  switch (network_manager.get_interface_state()) {
     case WifiAp:
     local_ui.tick();
     break;
@@ -357,6 +313,7 @@ void portal_ui_subprocess() {
 
 void action(GyverPortal& p) {
   if (p.form("/login")) {      // кнопка нажата
+    LoginPass lp;
     p.copyStr("lg", lp.ssid);  // копируем себе
     p.copyStr("ps", lp.pass);
     EEPROM.put(0, lp);              // сохраняем
@@ -368,14 +325,17 @@ void action(GyverPortal& p) {
     EEPROM.commit();                // записываем
     local_ui.stop();
     WiFi.softAPdisconnect();        // отключаем AP
-    interface_state = Pending;
+    network_manager.set_creds(lp);
     OS.start(9);
   }
   if (local_ui.click("time")) {
     GPtime time = local_ui.getTime("time");
     Serial.println(time.encode());
-    hour = time.hour;
-    minute = time.minute;
+    int hour = time.hour;
+    int minute = time.minute;
+    multi_clock.set_hour(hour);
+    multi_clock.set_minute(minute);
+
   }
   if (local_ui.click("brightness")) {
     uint32_t brightness = 0;
@@ -423,8 +383,15 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.println(brightness);
   } 
 }
+
+void setup_network() {
+    LoginPass lp;
+    EEPROM.begin(512);
+    EEPROM.get(0, lp);
+    network_manager.set_creds(lp);
+}
+
 void setup() {
-  led_display_mode = LedDisplayMode::Time;
   Serial.begin(9600);
   setup_display();
   setup_strip();
@@ -433,6 +400,7 @@ void setup() {
   client.setServer(mqtt.mqtt_server, mqtt.mqtt_port);
   client.setCallback(callback);
   setup_dht();
+  setup_network();
   pinMode(BUTTON_PIN, INPUT_PULLUP); 
   OS.attach(0, update_dht_info, 2000);
   OS.attach(1, reconnect_client, 10000);
@@ -443,7 +411,7 @@ void setup() {
   OS.attach(6, stop_animation_subprocess, 100);
   OS.attach(7, check_button_pressed, 200);
   OS.attach(8, portal_ui_subprocess, 20); 
-  OS.attach(9, check_network_subprocess, 100);
+  OS.attach(9, check_network_subprocess, 500);
   OS.exec(9);
   OS.exec(5);
 

@@ -115,7 +115,6 @@ void StripDriver::set_rainbow_task() {
   m_context.brightness = BRIGHTNESS;
   m_context.color = 0;
   m_context.job = Job::Rainbow;
-  Serial.println("set rainbow task");
 }
 
 void StripDriver::set_hot_animation_task() {
@@ -126,7 +125,6 @@ void StripDriver::set_hot_animation_task() {
   m_context.brightness = BRIGHTNESS;
   m_context.color = 0;
   m_context.job = Job::HotAnimation;
-  Serial.println("set hot animation task");
 }
 
 void StripDriver::set_cold_animation_task() {
@@ -137,7 +135,6 @@ void StripDriver::set_cold_animation_task() {
   m_context.brightness = BRIGHTNESS;
   m_context.color = 0;
   m_context.job = Job::ColdAnimation;
-  Serial.println("set cold animation task");
 }
 
 
@@ -146,7 +143,6 @@ void StripDriver::set_simple_color_task(uint32_t color, uint8_t brightness) {
   m_context.brightness = brightness;
   m_context.color = color;
   m_context.job = Job::SimpleColorTask;
-  Serial.println("set simple color task");
 }
 
 const Context & StripDriver::get_context() const {
@@ -161,7 +157,6 @@ void StripDriver::set_fade_animation_task() {
   m_context.brightness = BRIGHTNESS;
   m_context.color = 0;
   m_context.job = Job::FadeAnimation;
-  Serial.println("set fade task");
 }
 
 void StripDriver::rainbow() {
